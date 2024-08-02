@@ -4,16 +4,42 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
-	"runtime"
-	"sort"
+	"strings"
 
 	"github.com/mattn/go-tty"
 )
 
 var nav int = 0
-var start bool = false
-var args [2]string
+var files []os.DirEntry
+
+func reducer(dir string) string {
+	arr := strings.Split(dir, "\\")
+	if len(arr) == 2 {
+		return dir
+	} else {
+		var temp string = ""
+		if arr[len(arr)-1] == "" {
+			for i := 0; i < len(arr)-2; i++ {
+				temp = temp + arr[i] + "\\"
+			}
+		} else {
+			for i := 0; i < len(arr)-1; i++ {
+				temp = temp + arr[i] + "\\"
+			}
+		}
+		dir = temp
+	}
+	return dir
+}
+func next(path string, nextpath string) string {
+	if string(path[len(path)-1]) != "\\" {
+		path = path + "\\" + nextpath
+		return path
+	} else {
+		path = path + nextpath
+		return path
+	}
+}
 
 /*
 	func IsHiddenFile(filename string) (bool, error) {
@@ -28,83 +54,77 @@ var args [2]string
 		return attributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0, nil
 	}
 */
-func opener(dir string) {
-	var c *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		c = exec.Command("cmd", "/C", dir)
 
-	default: //Mac & Linux
-		c = exec.Command("rm", "-f", "/d/a.txt")
-	}
-
-	if err := c.Run(); err != nil {
-		fmt.Println("Error: ", err)
-	}
-}
-func navigation(dir []os.DirEntry) {
+func navigation(path string) {
 	tty, err := tty.Open()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer tty.Close()
-
+	render(files, path)
 	for {
 		r, err := tty.ReadRune()
 		if err != nil {
 			log.Fatal(err)
 		}
-		if string(r) == "s" && nav < len(dir)-1 {
+		if string(r) == "s" && nav < len(files)-1 {
 			nav++
+			render(files, path)
 		} else if string(r) == "w" && nav > 0 {
 			nav--
-		} else if string(r) == "o" {
-			opener(string(args[1]) + dir[nav-1].Name())
+			render(files, path)
+
+		} else if string(r) == "q" {
+			fmt.Print("\033[2J")
+
+			path = reducer(path)
+			fmt.Print(path)
+			files, _ = os.ReadDir(path)
+			nav = 0
+			render(files, path)
+
+		} else if string(r) == "e" {
+			fmt.Print("\033[2J")
+			path = next(path, files[nav].Name())
+			files, _ = os.ReadDir(path)
+			nav = 0
+			render(files, path)
+		} else if string(r) == "v" {
+			fmt.Print("\033[2J")
+			fmt.Print("\033[2;0H current directory is")
+			s, _ := os.Getwd()
+			fmt.Print(s)
 		}
 
 	}
 }
-func render(temp_nav int, dir []os.DirEntry) {
-	if !start {
-		for i := 0; i < len(dir); i++ {
-			pointer := " "
-			if nav == i {
-				pointer = "*"
-			}
-			fmt.Printf("\033[%d;0H%s%s\n", i+1, pointer, dir[i].Name())
-		}
-		temp_nav = nav
-		start = false
-	}
-	for {
-		if nav != temp_nav {
-			for i := 0; i < len(dir); i++ {
-				pointer := " "
-				if nav == i {
-					pointer = "*"
-				}
-				fmt.Printf("\033[%d;0H%s%s\n", i+1, pointer, dir[i].Name())
+func render(dir []os.DirEntry, path string) {
 
-			}
-			temp_nav = nav
+	fmt.Print("\033[1;0H current directory is")
+	fmt.Print(path)
+
+	for i := 0; i < len(dir); i++ {
+		pointer := " "
+		if nav == i {
+			pointer = "*"
 		}
 
+		fmt.Printf("\033[%d;0H%s%s\n", i+3, pointer, dir[i].Name())
+
 	}
+
 }
 func main() {
-	args[1] = os.Args[1]
+	args := os.Args[1]
+	var err error
+	files, err = os.ReadDir(string(args))
+	path, _ := os.Getwd()
 
-	files, err := os.ReadDir(string(args[1]))
-	sort.Slice(files, func(i, j int) bool {
-		return true
-	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(len(files))
 	fmt.Print("\033[2J")
-	temp_nav := nav
-	go navigation(files)
-	render(temp_nav, files)
+
+	navigation(path)
 
 }
