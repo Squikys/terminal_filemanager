@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/mattn/go-tty"
@@ -14,7 +15,7 @@ var files []os.DirEntry
 
 func reducer(dir string) string {
 	arr := strings.Split(dir, "\\")
-	if len(arr) == 2 {
+	if len(arr) <= 1 || arr[1] == "" {
 		return dir
 	} else {
 		var temp string = ""
@@ -41,20 +42,6 @@ func next(path string, nextpath string) string {
 	}
 }
 
-/*
-	func IsHiddenFile(filename string) (bool, error) {
-		pointer, err := syscall.UTF16PtrFromString(filename)
-		if err != nil {
-			return false, err
-		}
-		attributes, err := syscall.GetFileAttributes(pointer)
-		if err != nil {
-			return false, err
-		}
-		return attributes&syscall.FILE_ATTRIBUTE_HIDDEN != 0, nil
-	}
-*/
-
 func navigation(path string) {
 	tty, err := tty.Open()
 	if err != nil {
@@ -73,27 +60,28 @@ func navigation(path string) {
 		} else if string(r) == "w" && nav > 0 {
 			nav--
 			render(files, path)
-
 		} else if string(r) == "q" {
 			fmt.Print("\033[2J")
-
 			path = reducer(path)
-			fmt.Print(path)
 			files, _ = os.ReadDir(path)
 			nav = 0
 			render(files, path)
-
 		} else if string(r) == "e" {
-			fmt.Print("\033[2J")
-			path = next(path, files[nav].Name())
-			files, _ = os.ReadDir(path)
-			nav = 0
-			render(files, path)
+			if files[nav].Type().IsDir() {
+				fmt.Print("\033[2J")
+				path = next(path, files[nav].Name())
+				files, _ = os.ReadDir(path)
+				nav = 0
+				render(files, path)
+			}
+
 		} else if string(r) == "v" {
-			fmt.Print("\033[2J")
-			fmt.Print("\033[2;0H current directory is")
-			s, _ := os.Getwd()
-			fmt.Print(s)
+			nav = 0
+			cmd := exec.Command("cmd", "/C", "code", ".")
+			_, err := cmd.Output()
+			if err != nil {
+				panic(err)
+			}
 		}
 
 	}
@@ -119,7 +107,6 @@ func main() {
 	var err error
 	files, err = os.ReadDir(string(args))
 	path, _ := os.Getwd()
-
 	if err != nil {
 		log.Fatal(err)
 	}
